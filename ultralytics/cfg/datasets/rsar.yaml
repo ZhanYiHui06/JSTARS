@@ -1,0 +1,12 @@
+path: /path/to/dataset
+train: train/images
+val: val/images
+test: test/images
+
+names:
+  0: aircraft
+  1: bridge
+  2: car
+  3: harbor
+  4: ship
+  5: tank

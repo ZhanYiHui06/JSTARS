@@ -1,0 +1,58 @@
+nc: 6 # RSAR: aircraft, bridge, car, harbor, ship, tank
+scales:
+  # [depth, width, max_channels]
+  n: [0.50, 0.25, 1024]   # Nano
+  s: [0.50, 0.50, 1024]   # Small
+  l: [1.00, 1.00, 512]    # Large
+  x: [1.00, 1.50, 512]    # Extra Large
+
+backbone:
+  # [from, repeats, module, args]
+  - [-1, 1, Conv,  [64, 3, 2]]       # 0-P1/2
+  - [-1, 1, Conv,  [128, 3, 2, 1, 2]] # 1-P2/4
+  
+  - [-1, 2, DSC3k2,  [256, False, 0.25]]  # 2
+  
+  - [-1, 1, Conv,  [256, 3, 2, 1, 4]]     # 3-P3/8
+  - [-1, 2, DSC3k2,  [512, False, 0.25]]  # 4
+  - [-1, 1, SGE, [512]]                    # 5
+  
+  - [-1, 1, DSConv,  [512, 3, 2]]          # 6-P4/16
+  - [-1, 4, A2C2f, [512, True, 4]]         # 7
+  
+  - [-1, 1, DSConv,  [1024, 3, 2]]         # 8-P5/32
+  - [-1, 4, A2C2f, [1024, True, 1]]        # 9
+  - [-1, 1, LSKBlock, [512]]               # 10
+
+head:
+  - [[4, 7, 9], 2, HyperACE, [512, 8, True, True, 0.5, 1, "both"]]  # 11
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]                       # 12
+  - [11, 1, DownsampleConv, []]                                      # 13
+  
+  - [[7, 11], 1, FullPAD_Tunnel, []]   # 14
+  - [[4, 12], 1, FullPAD_Tunnel, []]   # 15
+  - [[10, 13], 1, FullPAD_Tunnel, []]  # 16
+  
+  - [-1, 1, nn.Upsample, [None, 2, "nearest"]]  # 17
+  - [[-1, 14], 1, Concat, [1]]                   # 18
+  - [-1, 2, DSC3k2, [512, True]]                 # 19
+  - [-1, 1, D3Block, [512]]                      # 20
+  - [[-1, 11], 1, FullPAD_Tunnel, []]            # 21
+
+  - [19, 1, nn.Upsample, [None, 2, "nearest"]]  # 22
+  - [[-1, 15], 1, Concat, [1]]                   # 23
+  - [-1, 2, DSC3k2, [256, True]]                 # 24
+  - [12, 1, Conv, [256, 1, 1]]                   # 25
+  - [[24, 25], 1, FullPAD_Tunnel, []]            # 26
+
+  - [-1, 1, Conv, [256, 3, 2]]       # 27
+  - [[-1, 21], 1, Concat, [1]]       # 28
+  - [-1, 2, DSC3k2, [512, True]]     # 29
+  - [[-1, 11], 1, FullPAD_Tunnel, []]  # 30
+
+  - [29, 1, Conv, [512, 3, 2]]        # 31
+  - [[-1, 16], 1, Concat, [1]]        # 32
+  - [-1, 2, DSC3k2, [1024, True]]     # 33
+  - [[-1, 13], 1, FullPAD_Tunnel, []]  # 34
+
+  - [[26, 30, 34], 1, OBB, [nc, 1]]   # OBB(P3, P4, P5)
